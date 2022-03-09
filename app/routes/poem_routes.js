@@ -10,10 +10,13 @@ const customErrors = require('../../lib/custom_errors')
 
 // we'll use this function to send 404 when non-existent document is requested
 const handle404 = customErrors.handle404
+const requireOwnership = customErrors.requireOwnership
 
 // this is middleware that will remove blank fields from `req.body`, e.g.
 // { example: { title: '', text: 'foo' } } -> { example: { text: 'foo' } }
 const removeBlanks = require('../../lib/remove_blank_fields')
+
+const requireToken = passport.authenticate('bearer', { session: false })
 
 // instantiate a router (mini app that only handles routes)
 const router = express.Router()
@@ -21,10 +24,6 @@ const router = express.Router()
 // INDEX
 // GET /poems
 router.get('/poems', (req, res, next) => {
-  // queries to get a genre
-
-  // console.log(req.query.genre)
-  // Movie.find({ 'genre': req.query.genre })
   Poem.find()
     .then(poems => {
       // `examples` will be an array of Mongoose documents
@@ -52,11 +51,11 @@ router.get('/poems/:id', (req, res, next) => {
 
 // CREATE
 // POST /poems
-router.post('/poems', (req, res, next) => {
+router.post('/poems', requireToken, (req, res, next) => {
   // set owner of new example to be current user
-  // req.body.movie.owner = req.user.id
+  req.body.poem.owner = req.user.id
 
-  Poem.create(req.body.movie)
+  Poem.create(req.body.poem)
     // respond to successful `create` with status 201 and JSON of new "example"
     .then(poem => {
       res.status(201).json({ poem: poem.toObject() })
@@ -69,7 +68,7 @@ router.post('/poems', (req, res, next) => {
 
 // UPDATE
 // PATCH /poems/5a7db6c74d55bc51bdf39793
-router.patch('/poems/:id', removeBlanks, (req, res, next) => {
+router.patch('/poems/:id', requireToken, removeBlanks, (req, res, next) => {
   // if the client attempts to change the `owner` property by including a new
   // owner, prevent that by deleting that key/value pair
   delete req.body.poem.owner
@@ -83,7 +82,7 @@ router.patch('/poems/:id', removeBlanks, (req, res, next) => {
       /****************
        * comment back in
        */
-      // requireOwnership(req, movie)
+      requireOwnership(req, poem)
 
       // pass the result of Mongoose's `.update` to the next `.then`
       return poem.updateOne(req.body.poem)
@@ -96,12 +95,12 @@ router.patch('/poems/:id', removeBlanks, (req, res, next) => {
 
 // DESTROY
 // DELETE /poems/5a7db6c74d55bc51bdf39793
-router.delete('/poems/:id', (req, res, next) => {
+router.delete('/poems/:id', requireToken, (req, res, next) => {
   Poem.findById(req.params.id)
     .then(handle404)
     .then(poem => {
       // throw an error if current user doesn't own `example`
-      // requireOwnership(req, movie)
+      requireOwnership(req, poem)
       // delete the example ONLY IF the above didn't throw
       poem.deleteOne()
     })
